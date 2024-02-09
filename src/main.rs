@@ -36,31 +36,37 @@ impl Worker {
 }
 
 fn main() {
-    // Create the task in main thread
-    let task = Task::create_task(1, "some work");
-    // wrap it in Arc to send to the worker thread
-    let task = Arc::new(task);
+    let num_tasks = 10;
+    let mut tasks: Vec<Arc<Task>> = vec![];
 
-    // tx is the transmitter
-    // rx is the receiver.
-    // tx is closed over by the thread API
-    // and we use that to send some value from *that * thread
-    // to the main thread
-    // remember that mpsc is multiple producer and single consumer
-    // in our case it is multiple worker threads, send stuff to
-    // the main thread
+    for i in 0..num_tasks {
+        let payload = format!("Task-{} payload", i);
+        let task = Arc::new(Task::create_task(i, payload.as_str()));
+        tasks.push(task);
+    }
+
+    // multiple producer, single consumer channel
+    // i.e the threads that we spawn are the producers and we are the consumer
     let (tx, rx) = mpsc::channel();
 
-    // the thread we spawn has "closed over" local vars(?) such as task, tx etc.
-    let name = String::from("worker");
-    let _ = thread::Builder::new().name(name).spawn(move || {
-        let thread_task = task.clone();
-        // let's create a worker here
-        let worker = Worker::create_worker(1);
-        let result = worker.process_task(thread_task);
-        tx.send(result).unwrap();
-    });
+    for (i, t) in tasks.into_iter().enumerate() {
 
-    let received = rx.recv().unwrap();
-    println!("The main thread received {}", received);
+        let tx_clone = tx.clone();
+        let name = format!("Worker-{}", i);
+        let _ = thread::Builder::new().name(name).spawn(move || {
+            let task = t.clone();
+            let worker = Worker::create_worker(i as u32);
+            let result = worker.process_task(task);
+            tx_clone.send(result).unwrap();
+        });
+
+    }
+
+    // loop through all results
+    for received in &rx {
+        println!("The main thread received {}", received);
+    }
+
+    // Drop the receiver to close off things
+    drop(rx);
 }
