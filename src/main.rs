@@ -92,6 +92,11 @@ fn main() {
     }
 
     // This loop took me a while to figure out ...
+    // Essentially the pattern to learn is that checking the rx channel is like
+    // acting on an event. So if there isn't any on rx, you can be in the loop
+    // but not going anywhere. So you keep checking by explicitly looking for
+    // the Result<> returned.
+    // Simply looping in a for r in rx {} aint going nowhere ...
     let mut results: Vec<String> = vec![];
     while Instant::now().duration_since(start) < timeout {
         match rx.try_recv() {
